@@ -1,0 +1,251 @@
+---
+title: "Mini_Project_2"
+author: "Diane Chiang"
+date: "2024-02-06"
+knit: (function(inputFile, encoding) {
+        Sys.setenv(RSTUDIO_PANDOC="/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools");
+        rmarkdown::render(inputFile,
+                          encoding=encoding, 
+                          output_file=file.path(dirname(inputFile), "dimond_explore.pdf")) })
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(tidyverse)
+data(diamonds)
+set.seed(557)
+```
+
+```{r}
+diamonds_small <- diamonds %>% filter(carat %in% c(0.99,1.0)) %>% group_by(carat) %>% sample_n(23)
+diamonds_small <- diamonds_small %>% mutate(std_price = price/(100*carat))
+head(diamonds_small)
+```
+
+## Part A
+### 1. Using the full diamonds dataset, create a scatterplot with carat on the x-axis and price on the y-axis, restricting to values of carat between 0.9 and 1.1. Comment on what you notice from this figure.
+```{r}
+d_sub = diamonds[diamonds$carat>=0.9 & diamonds$carat<=1.1,]
+plot(x=d_sub$carat, y=d_sub$price, xlab="Carat", ylab="Price", main="Diamond Carat (between 0.9 and 1.1) VS. Price")
+```
+In general, as carat increases (from 0.90 to 1.10), prices increases as well as the variances in prices increase. 
+
+### 2. Why did we create standardized price?
+Compare equivalent units (ie. compare prices per carat) and account for the scale in price due to the difference in carats.
+
+### 3. Graphically and numerically summarize the distribution of standardardized prices by carat.
+#### a. Create side-by-side boxplots.
+```{r}
+c99 = as.list(diamonds_small[diamonds_small$carat == 0.99,])$std_price
+c100 = as.list(diamonds_small[diamonds_small$carat == 1.00,])$std_price
+carat_p = cbind(c99, c100)
+boxplot(carat_p, beside=T, xlab="Carat (0.99 and 1.00)", ylab="Standardized Price")
+```
+
+#### b. Obtain the mean and standard deviation of the standardized prices separately by carat.
+```{r}
+diamonds_small = diamonds_small %>% group_by(carat) %>% mutate(mean_std_price = mean(std_price), sd_std_price = sd(std_price))
+head(diamonds_small)
+```
+
+```{r}
+d_mean_sd = diamonds_small %>% select("carat", "mean_std_price", "sd_std_price") %>% distinct() %>% arrange(carat)
+d_mean_sd
+```
+
+#### c. Comment on what you observe
+The mean standardized price for 0.99 carat diamonds is less than the mean standardized price for 1.00 carat diamonds (44.50681 < 56.33783). Additionally, the standard deviation of standardized price for 0.99 carat diamonds is less than the standard deviation of standardized price for 1.00 carat diamonds (13.32311 < 17.49736). This observation agrees with the side-by-side boxplot.
+
+### 4. Next, we will conduct a hypothesis test using approaches discussed during Weeks 3-4 to evaluate if there is a difference between the average standardized prices of 0.99 and 1 carat diamonds.
+#### a. What are your null and alternative hypotheses? Write these out in words rather than using notation.
+The null hypothesis is that there is no difference between the average (mean) standard prices of 0.99 and 1 carat diamonds, whereas the alternate hypothesis is that there is a difference between the average standard prices of 0.99 and 1 carat diamonds.
+
+#### b. What is the name of the test you will use?
+Since we can assume the carats & prices of the respective groups are independent, we will use the 2 sample test of population means with sample standard deviation (2 sample t test), without assuming equal variance, since the population standard deviations are unknown.
+
+#### c. What is the distribution of the test statistic under the null hypothesis?
+The distribution of the test statistic under the null hypothesis has a t-distribution with 41.093 degrees of freedom if we don't assume equal variance.
+
+#### d. What would be your rejection rule or rejection region for this test using a type I error probability of 0.05?
+```{r}
+qt(0.975, df=41.093)
+```
+If the t score is greater than 2.019 or less than -2.019, we will reject the null hypothesis.
+
+#### e. What is the value of the test statistic calculated from the data. What would you conclude using the rejection rule or rejection region from d (reject or fail to reject the null hypothesis)?
+```{r}
+# do we assume equal variance? Yes -> Classical t-test (df = n_a + n_b - 2), No -> Welch t-test (weird df)
+dp_99 = diamonds_small[diamonds_small$carat == 0.99, ]$std_price
+dp_100 = diamonds_small[diamonds_small$carat == 1.00, ]$std_price
+
+n_dp_99 = length(dp_99)
+n_dp_100 = length(dp_100)
+
+mean_dp_99 = mean(dp_99)
+mean_dp_100 = mean(dp_100)
+sd_dp_99 = sd(dp_99)
+sd_dp_100 = sd(dp_100)
+
+df = 41.093
+se = sqrt((sd_dp_99^2 / n_dp_99) + (sd_dp_100^2 / n_dp_100))
+t = (mean_dp_99 - mean_dp_100) / se
+
+print(t)
+```
+
+```{r}
+t.test(dp_99, dp_100, var.equal=FALSE, corr = FALSE)
+```
+Without assuming equal variance, the t statistic is around -2.58 with the degree of freedom being 41.093. Since the t score is less than -2.019402, we reject the null hypothesis and conclude that there is a difference in mean standardized prices between 0.99 and 1 carat diamonds.
+
+#### f. Repeat d and e using a type I error probability of 0.1.
+```{r}
+qt(0.95, df=41.093)
+```
+
+If our significance level is now 0.1, we reject the null hypothesis if the t score is less than -1.68 and and greater than 1.68. In our case, the t statistic, approximately -2.58, is less than -1.68, so we reject the null hypothesis and conclude that there is sufficient evidence of a difference in mean standard prices between 0.99 and 1 carat diamonds.
+
+#### g. Compute the p-value. What would you conclude at the 0.05 level? Does this match your decision from e?
+Without out assuming equal variance, the p value turns out to be 0.01355, which is less than 0.05, so we can reject the null hypothesis and conclude that there is a difference between the mean standard prices between 0.99 and 1 carat diamonds.
+
+### 5. Calculate a 95% confidence interval for the difference in average standardized price between the 0.99 and 1 carat diamonds. Provide an interpretation.
+```{r}
+lower_bound = (mean_dp_99 - mean_dp_100) - 2.019402 * se
+upper_bound = (mean_dp_99 - mean_dp_100) + 2.019402 * se
+print(c(lower_bound, upper_bound))
+```
+We are 95% confident that the mean standardized price difference between 0.99 and 1 caret diamonds is between approximately -21.091430 and -2.570608. 
+
+## Part B
+### 1. In this part, you’ll conduct a randomization test. Using the two samples of diamonds from Part A (each sample size is 23), randomize the carat weight to the standardized price values. Do this 1000 times.
+```{r, message=FALSE}
+library(dplyr)
+set.seed(557)
+carat_99 = rep(0.99, 23)
+carat_100 = rep(1, 23)
+carats = append(carat_99, carat_100)
+sub_d = diamonds_small %>% select(carat, std_price)
+mean_diffs = rep(0, 1000)
+
+for(i in 1:1000){
+  rand_carats = sample(carats, 46)
+  rand_std_price = sample(sub_d$std_price, 46)
+
+  df = data.frame(rand_carats, rand_std_price)
+  df = df %>% group_by(rand_carats) %>% mutate(mean_std_price = mean(rand_std_price)) %>% distinct(rand_carats, mean_std_price)
+  rand_mean_99_std_price = df[df$rand_carats == 0.99, "mean_std_price"]$mean_std_price
+  rand_mean_100_std_price = df[df$rand_carats == 1, "mean_std_price"]$mean_std_price
+  rand_mean_diff = rand_mean_99_std_price - rand_mean_100_std_price
+  mean_diffs[i] = rand_mean_diff
+}
+```
+
+```{r}
+mean_dp_99 - mean_dp_100
+```
+
+#### a. Create a figure that shows the randomization distribution– specifically it should show the difference in randomized sample means of price per carat. In this figure, include the observed difference in sample means.
+```{r}
+hist(mean_diffs)
+abline(v = mean_dp_99 - mean_dp_100, col="red")
+```
+
+#### b. Compute a p-value.
+```{r}
+p_val = length(mean_diffs[mean_diffs < (mean_dp_99 - mean_dp_100)]) / length(mean_diffs)
+p_val
+```
+
+#### c. Using a significance level of 0.05, what do you conclude? Be sure to clearly interpret your results in the context of the data
+The p value is 0.004, which is less than 0.05, so we reject the null hypothesis that the population distributions are identical for standardized prices of 0.99 and 1 carat diamonds and conclude that there is a difference in mean standardized price of the two respective groups.
+
+### 2. Next, we’ll look at creating bootstrap confidence intervals. To do this, apply the process of bootstrapping to each sample separately and then calculate the difference in sample means each time. Do this 1000 times (so 1000 times for each group and obtain 1000 differences in sample means).
+```{r}
+set.seed(557)
+sub_d_99 = sub_d[sub_d$carat == 0.99,]$std_price
+sub_d_100 = sub_d[sub_d$carat == 1,]$std_price
+mean_diff_bs = rep(0, 1000)
+
+for(i in 1:1000){
+  samp_99 = sample(sub_d_99, replace = TRUE)
+  samp_100 = sample(sub_d_100, replace = TRUE)
+  mean_diff = mean(samp_99) - mean(samp_100)
+  mean_diff_bs[i] = mean_diff
+}
+```
+
+#### a. Create a figure that shows the difference in bootstrapped means.
+```{r}
+hist(mean_diff_bs)
+abline(v = mean_dp_99 - mean_dp_100, col="red")
+```
+
+#### b. Using the bootstrap distribution, what would be a 95% bootstrap percentile confidence interval for the true population difference in prices per carat of diamonds that weight 0.99 carats and 1 carat?
+```{r}
+quantile(mean_diff_bs, probs = c(0.25, 0.975))
+```
+Using the bootstrap distribution, we estimate with 95% confidence that the true population difference in prices per carat of 0.99 carats and 1 carat diamonds is between -14.874459 and -3.625083.
+
+#### c. What is the standard deviation of the bootstrap samples? Use this as an estimate of the standard error in Part A, Q5 and create a 95% bootstrap confidence interval for the true population difference in prices per carat of diamonds that weight 0.99 carats and 1 carat.
+```{r}
+std_dev_bs = sd(mean_diff_bs)
+print(std_dev_bs)
+
+lower_bound = (mean_dp_99 - mean_dp_100) - 2.019402 * std_dev_bs
+upper_bound = (mean_dp_99 - mean_dp_100) + 2.019402 * std_dev_bs
+print(c(lower_bound, upper_bound))
+```
+Using the standard deviation of the bootstrap samples, we estimate with 95% confidence that the true population difference in prices per carat of diamonds that weighs 0.99 carats and 1 carat is between -20.792391 and -2.869647.
+
+## Part C
+### Before starting this problem, comment on your findings from the two previous parts. What are some possible explanations for what you are seeing?
+With all the different tests we've conducted (2 sample t test, randomize test, and bootstrap test), we reject the null hypothesis and conclude that there is a difference in mean standard prices per carat for diamonds that weigh 0.99 carats and 1 carat, specifically the mean standard price of 0.99 carats diamonds is lower than the mean standard price of 1 carat diamonds. We also saw that the variation in standard price increases as carat increases, motivating further analysis in other factors affecting the different in prices.
+
+### Create another small dataset that only includes diamonds that are 1 carat. Comment on the relationships between cut, color, clarity, and price, using graphical and numerical summaries as you see fit.
+```{r}
+diamonds_1 = diamonds[diamonds$carat == 1.00, c("carat", "cut", "color", "clarity", "price")]
+head(diamonds_1)
+```
+
+```{r, message=FALSE}
+boxplot(price ~ cut, data=diamonds_1, main="Price vs. Cut in 1 Carat Diamonds")
+boxplot(price ~ color, data=diamonds_1, main="Price vs. Color in 1 Carat Diamonds")
+boxplot(price ~ clarity, data=diamonds_1, main="Price vs. Clarity in 1 Carat Diamonds")
+```
+For 1 carat diamonds, as price increases, the mean price for better cut increases in general, price decreases as the color grade increases from D to J, and price increases as clarity grade increases from I1 to If.
+
+### What are the relationships between (1) carat and cut, (2) carat and color, and (3) carat and clarity in the dataset we used for the questions above?
+```{r, warning=FALSE}
+carat_vs_cut = diamonds_small %>% group_by(carat, cut) %>% summarize(n = n()) %>% mutate(prop = n/sum(n))
+carat_vs_color = diamonds_small %>% group_by(carat, color) %>% summarize(n = n()) %>% mutate(prop = n/sum(n))
+carat_vs_clarity = diamonds_small %>% group_by(carat, clarity) %>% summarize(n = n()) %>% mutate(prop = n/sum(n))
+carat_vs_cut
+carat_vs_color
+carat_vs_clarity
+```
+```{r}
+library(ggplot2)
+carat_vs_cut %>%
+  ggplot(aes(x=factor(cut), y=prop, fill=factor(carat))) +
+  geom_bar(stat="identity", position="dodge") +
+  labs(x="Cut", y="Proportion", fill="Carat")
+```
+
+```{r}
+carat_vs_color %>%
+  ggplot(aes(x=factor(color), y=prop, fill=factor(carat))) +
+  geom_bar(stat="identity", position="dodge") +
+  labs(x="Color", y="Proportion", fill="Carat")
+```
+
+```{r}
+carat_vs_clarity %>% 
+  ggplot(aes(x=factor(clarity), y=prop, fill=factor(carat))) +
+  geom_bar(stat="identity", position="dodge") + 
+  labs(x="Clarity", y="Proportion", fill="Carat")
+```
+
+### Tie this altogether and provide some perspective on the findings from Parts A and B.
+For 0.99 carat diamonds, the lower price may be a combination of the size of the diamonds, the lower grade cuts (more fair cuts), lower grade color (F to J), and lower grade clarity (I1, SI2, SI1) being the more prominent groups within the 0.99 carat diamonds selection. For 1 carat diamonds, the majority have better cuts, colors, and clarity, resulting in a higher price. Therefore, the size of the diamonds (at least between 0.99 and 1 carat diamonds) is not the sole determinant of the difference in prices. 
